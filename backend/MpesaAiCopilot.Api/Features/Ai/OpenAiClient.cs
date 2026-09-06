@@ -4,7 +4,7 @@ using System.Text.Json;
 
 namespace MpesaAiCopilot.Api.Features.Ai;
 
-public class OpenAiClient
+public class OpenAiClient: IAiClient
 {
     private const string OpenAiUrl = "https://api.openai.com/v1/responses";
 
@@ -34,7 +34,7 @@ public class OpenAiClient
 
 
 
-    public async Task<string> ChatAsync(string message)
+    public async Task<AiResponse> ChatAsync(string message)
     {
         var apiKey = GetApiKey();
 
@@ -72,7 +72,16 @@ public class OpenAiClient
                 $"OpenAI returned {(int)response.StatusCode} ({response.StatusCode}): {responseBody}");
         }
 
-        return responseBody;
+        using var document = JsonDocument.Parse(responseBody);
+
+        var text = document
+            .RootElement
+            .GetProperty("output")[0]
+            .GetProperty("content")[0]
+            .GetProperty("text")
+            .GetString();
+
+        return new AiResponse(text ?? string.Empty);
     }
 
 }

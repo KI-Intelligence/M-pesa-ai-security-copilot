@@ -7,6 +7,9 @@ builder.Services.AddHttpClient();
 
 builder.Services.AddHttpClient<OpenAiClient>();
 builder.Services.AddHttpClient<AnthropicClient>();
+builder.Services.AddHttpClient<GeminiClient>();
+
+builder.Services.AddScoped<AiClientFactory>();
 
 builder.Services.AddOpenApi();
 
@@ -41,11 +44,22 @@ app.MapGet("/weatherforecast", () =>
 
 
 
+//    app.MapPost("/api/ai/chat", async (
+//    ChatRequest request,
+//    OpenAiClient openAiClient) =>
+//{
+//    var response = await openAiClient.ChatAsync(request.Message);
+
+//    return Results.Ok(response);
+//});
+
 app.MapPost("/api/ai/chat", async (
     ChatRequest request,
-    OpenAiClient openAiClient) =>
+    AiClientFactory aiClientFactory) =>
 {
-    var response = await openAiClient.ChatAsync(request.Message);
+    var aiClient = aiClientFactory.Create();
+
+    var response = await aiClient.ChatAsync(request.Message);
 
     return Results.Ok(response);
 });

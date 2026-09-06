@@ -1,18 +1,17 @@
-﻿using System.Net.Http.Headers;
-using System.Text;
+﻿using System.Text;
 using System.Text.Json;
 
 namespace MpesaAiCopilot.Api.Features.Ai;
 
-public class AnthropicClient : IAiClient
+public class GeminiClient: IAiClient
 {
-    private const string AnthropicUrl =
-        "https://api.anthropic.com/v1/messages";
+    private const string GeminiUrl =
+        "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent";
 
     private readonly HttpClient _httpClient;
     private readonly IConfiguration _configuration;
 
-    public AnthropicClient(
+    public GeminiClient(
         HttpClient httpClient,
         IConfiguration configuration)
     {
@@ -22,12 +21,12 @@ public class AnthropicClient : IAiClient
 
     private string GetApiKey()
     {
-        var apiKey = _configuration["Anthropic:ApiKey"];
+        var apiKey = _configuration["Gemini:ApiKey"];
 
         if (string.IsNullOrWhiteSpace(apiKey))
         {
             throw new InvalidOperationException(
-                "Anthropic API key is not configured.");
+                "Gemini API key is not configured.");
         }
 
         return apiKey;
@@ -37,28 +36,30 @@ public class AnthropicClient : IAiClient
     {
         var apiKey = GetApiKey();
 
-        using var request = new HttpRequestMessage(
-            HttpMethod.Post,
-            AnthropicUrl);
-
-        request.Headers.Add("x-api-key", apiKey);
-        request.Headers.Add("anthropic-version", "2023-06-01");
+        var url = $"{GeminiUrl}?key={apiKey}";
 
         var body = new
         {
-            model = "claude-sonnet-4-5",
-            max_tokens = 1024,
-            messages = new[]
+            contents = new[]
             {
                 new
                 {
-                    role = "user",
-                    content = message
+                    parts = new[]
+                    {
+                        new
+                        {
+                            text = message
+                        }
+                    }
                 }
             }
         };
 
         var json = JsonSerializer.Serialize(body);
+
+        using var request = new HttpRequestMessage(
+            HttpMethod.Post,
+            url);
 
         request.Content = new StringContent(
             json,
@@ -74,18 +75,23 @@ public class AnthropicClient : IAiClient
         if (!response.IsSuccessStatusCode)
         {
             throw new HttpRequestException(
-                $"Anthropic returned {(int)response.StatusCode} " +
+                $"Gemini returned {(int)response.StatusCode} " +
                 $"({response.StatusCode}): {responseBody}");
         }
 
-        using var document = JsonDocument.Parse(responseBody);
+        using var document =
+            JsonDocument.Parse(responseBody);
 
         var text = document
             .RootElement
-            .GetProperty("content")[0]
+            .GetProperty("candidates")[0]
+            .GetProperty("content")
+            .GetProperty("parts")[0]
             .GetProperty("text")
             .GetString();
 
         return new AiResponse(text ?? string.Empty);
+
+        
     }
 }
