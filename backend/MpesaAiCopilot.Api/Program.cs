@@ -1,6 +1,8 @@
 using MpesaAiCopilot.Api.Features.Ai;
 using MpesaAiCopilot.Api.Features.Ai.Contracts;
-using MpesaAiCopilot.Api.Features.Ai.Providers; 
+using MpesaAiCopilot.Api.Features.Ai.Providers;
+using MpesaAiCopilot.Api.Features.Ai.Validation;
+
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -46,19 +48,21 @@ app.MapGet("/weatherforecast", () =>
 
 
 
-//    app.MapPost("/api/ai/chat", async (
-//    ChatRequest request,
-//    OpenAiClient openAiClient) =>
-//{
-//    var response = await openAiClient.ChatAsync(request.Message);
-
-//    return Results.Ok(response);
-//});
-
 app.MapPost("/api/ai/chat", async (
     ChatRequest request,
     AiClientFactory aiClientFactory) =>
+
 {
+
+    try
+    {
+        AiInputValidator.Validate(request.Message);
+    }
+    catch (ArgumentException ex)
+    {
+        return Results.BadRequest(new { error = ex.Message });
+    }
+
     var aiClient = aiClientFactory.Create();
 
     var response = await aiClient.ChatAsync(request.Message);

@@ -1,6 +1,10 @@
 ﻿using System.Text;
 using System.Text.Json;
 using MpesaAiCopilot.Api.Features.Ai.Contracts;
+using MpesaAiCopilot.Api.Features.Ai.Prompts;
+
+
+
 namespace MpesaAiCopilot.Api.Features.Ai.Providers;
 
 public class GeminiClient: IAiClient
@@ -38,10 +42,26 @@ public class GeminiClient: IAiClient
 
         var url = $"{GeminiUrl}?key={apiKey}";
 
+
+
+
         var body = new
         {
-            contents = new[]
+            systemInstruction = new
             {
+                parts = new[]
+                {
+                    new
+                    {
+                
+                
+                      text = SecurityCopilotPrompt.SystemPrompt
+                }
+            }
+        },
+
+        contents = new[]
+        {
                 new
                 {
                     parts = new[]
@@ -52,8 +72,9 @@ public class GeminiClient: IAiClient
                         }
                     }
                 }
-            }
-        };
+        }
+
+            };
 
         var json = JsonSerializer.Serialize(body);
 
@@ -79,19 +100,55 @@ public class GeminiClient: IAiClient
                 $"({response.StatusCode}): {responseBody}");
         }
 
-        using var document =
-            JsonDocument.Parse(responseBody);
+        //using var document =
+        //    JsonDocument.Parse(responseBody);
 
-        var text = document
-            .RootElement
-            .GetProperty("candidates")[0]
-            .GetProperty("content")
-            .GetProperty("parts")[0]
-            .GetProperty("text")
-            .GetString();
+        //var text = document
+        //    .RootElement
+        //    .GetProperty("candidates")[0]
+        //    .GetProperty("content")
+        //    .GetProperty("parts")[0]
+        //    .GetProperty("text")
+        //    .GetString();
+
+        //return new AiResponse(text ?? string.Empty);
+
+        using var document = JsonDocument.Parse(responseBody);
+
+        if (!document.RootElement.TryGetProperty("candidates", out var candidates) ||
+            candidates.GetArrayLength() == 0)
+        {
+            throw new InvalidOperationException(
+                $"Gemini response did not contain any candidates. Response: {responseBody}");
+        }
+
+        var candidate = candidates[0];
+
+        if (!candidate.TryGetProperty("content", out var content))
+        {
+            throw new InvalidOperationException(
+                $"Gemini response did not contain content. Response: {responseBody}");
+        }
+
+        if (!content.TryGetProperty("parts", out var parts) ||
+            parts.GetArrayLength() == 0)
+        {
+            throw new InvalidOperationException(
+                $"Gemini response did not contain any parts. Response: {responseBody}");
+        }
+
+        var part = parts[0];
+
+        if (!part.TryGetProperty("text", out var textElement))
+        {
+            throw new InvalidOperationException(
+                $"Gemini response did not contain text. Response: {responseBody}");
+        }
+
+        var text = textElement.GetString();
 
         return new AiResponse(text ?? string.Empty);
 
-        
+
     }
 }
