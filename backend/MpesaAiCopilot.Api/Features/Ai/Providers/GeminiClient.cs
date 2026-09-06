@@ -1,7 +1,7 @@
 ﻿using System.Text;
 using System.Text.Json;
-
-namespace MpesaAiCopilot.Api.Features.Ai;
+using MpesaAiCopilot.Api.Features.Ai.Contracts;
+namespace MpesaAiCopilot.Api.Features.Ai.Providers;
 
 public class GeminiClient: IAiClient
 {

@@ -1,4 +1,8 @@
-﻿namespace MpesaAiCopilot.Api.Features.Ai;
+﻿using MpesaAiCopilot.Api.Features.Ai.Contracts;
+using MpesaAiCopilot.Api.Features.Ai.Providers;
+
+namespace MpesaAiCopilot.Api.Features.Ai;
+
 
 public class AiClientFactory
 {

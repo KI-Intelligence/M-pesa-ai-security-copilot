@@ -1,8 +1,9 @@
 ﻿using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
+using MpesaAiCopilot.Api.Features.Ai.Contracts;
 
-namespace MpesaAiCopilot.Api.Features.Ai;
+namespace MpesaAiCopilot.Api.Features.Ai.Providers;
 
 public class AnthropicClient : IAiClient
 {
