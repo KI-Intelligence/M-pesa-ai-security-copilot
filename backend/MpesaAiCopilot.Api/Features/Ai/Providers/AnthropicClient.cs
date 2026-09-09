@@ -89,4 +89,12 @@ public class AnthropicClient : IAiClient
 
         return new AiResponse(text ?? string.Empty);
     }
+
+
+
+    public Task<SecurityAnalysis> AnalyzeAsync(string message)
+    {
+        throw new NotImplementedException(
+            "Structured security analysis is not implemented for Anthropic yet.");
+    }
 }

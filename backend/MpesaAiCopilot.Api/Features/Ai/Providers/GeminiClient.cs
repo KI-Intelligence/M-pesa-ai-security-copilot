@@ -7,7 +7,7 @@ using MpesaAiCopilot.Api.Features.Ai.Prompts;
 
 namespace MpesaAiCopilot.Api.Features.Ai.Providers;
 
-public class GeminiClient: IAiClient
+public class GeminiClient : IAiClient
 {
     private const string GeminiUrl =
         "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent";
@@ -38,43 +38,46 @@ public class GeminiClient: IAiClient
 
     public async Task<AiResponse> ChatAsync(string message)
     {
-        var apiKey = GetApiKey();
-
-        var url = $"{GeminiUrl}?key={apiKey}";
-
-
-
-
         var body = new
         {
             systemInstruction = new
             {
                 parts = new[]
                 {
-                    new
-                    {
-                
-                
-                      text = SecurityCopilotPrompt.SystemPrompt
-                }
-            }
-        },
-
-        contents = new[]
-        {
                 new
                 {
-                    parts = new[]
+                    text = SecurityCopilotPrompt.SystemPrompt
+                }
+            }
+            },
+
+            contents = new[]
+            {
+            new
+            {
+                parts = new[]
+                {
+                    new
                     {
-                        new
-                        {
-                            text = message
-                        }
+                        text = message
                     }
                 }
+            }
         }
+        };
 
-            };
+        var responseBody = await SendRequestAsync(body);
+        var text = ExtractText(responseBody);
+
+        return new AiResponse(text);
+    }
+
+
+    private async Task<string> SendRequestAsync(object body)
+    {
+        var apiKey = GetApiKey();
+
+        var url = $"{GeminiUrl}?key={apiKey}";
 
         var json = JsonSerializer.Serialize(body);
 
@@ -100,26 +103,18 @@ public class GeminiClient: IAiClient
                 $"({response.StatusCode}): {responseBody}");
         }
 
-        //using var document =
-        //    JsonDocument.Parse(responseBody);
+        return responseBody;
+    }
 
-        //var text = document
-        //    .RootElement
-        //    .GetProperty("candidates")[0]
-        //    .GetProperty("content")
-        //    .GetProperty("parts")[0]
-        //    .GetProperty("text")
-        //    .GetString();
-
-        //return new AiResponse(text ?? string.Empty);
-
+    private static string ExtractText(string responseBody)
+    {
         using var document = JsonDocument.Parse(responseBody);
 
         if (!document.RootElement.TryGetProperty("candidates", out var candidates) ||
             candidates.GetArrayLength() == 0)
         {
             throw new InvalidOperationException(
-                $"Gemini response did not contain any candidates. Response: {responseBody}");
+                "Gemini response did not contain any candidates.");
         }
 
         var candidate = candidates[0];
@@ -127,28 +122,160 @@ public class GeminiClient: IAiClient
         if (!candidate.TryGetProperty("content", out var content))
         {
             throw new InvalidOperationException(
-                $"Gemini response did not contain content. Response: {responseBody}");
+                "Gemini response did not contain content.");
         }
 
         if (!content.TryGetProperty("parts", out var parts) ||
             parts.GetArrayLength() == 0)
         {
             throw new InvalidOperationException(
-                $"Gemini response did not contain any parts. Response: {responseBody}");
+                "Gemini response did not contain any parts.");
         }
 
-        var part = parts[0];
-
-        if (!part.TryGetProperty("text", out var textElement))
+        if (!parts[0].TryGetProperty("text", out var textElement))
         {
             throw new InvalidOperationException(
-                $"Gemini response did not contain text. Response: {responseBody}");
+                "Gemini response did not contain text.");
         }
 
-        var text = textElement.GetString();
-
-        return new AiResponse(text ?? string.Empty);
-
-
+        return textElement.GetString() ?? string.Empty;
     }
+
+    public async Task<SecurityAnalysis> AnalyzeAsync(string message)
+    {
+        var body = new
+        {
+            systemInstruction = new
+            {
+                parts = new[]
+                {
+                new
+                {
+                    text = SecurityCopilotPrompt.SystemPrompt
+                }
+            }
+            },
+
+            contents = new[]
+            {
+            new
+            {
+                parts = new[]
+                {
+                    new
+                    {
+                        text = message
+                    }
+                }
+            }
+        },
+
+            generationConfig = new
+            {
+                responseMimeType = "application/json",
+
+                responseSchema = new
+                {
+                    type = "object",
+
+                    properties = new
+                    {
+                        riskLevel = new
+                        {
+                            type = "string",
+                            description = "Overall security risk level."
+                        },
+
+                        summary = new
+                        {
+                            type = "string",
+                            description = "A concise summary of the security assessment."
+                        },
+
+                        missingInformation = new
+                        {
+                            type = "array",
+                            items = new
+                            {
+                                type = "string"
+                            }
+                        },
+
+                        findings = new
+                        {
+                            type = "array",
+                            items = new
+                            {
+                                type = "object",
+
+                                properties = new
+                                {
+                                    title = new { type = "string" },
+                                    severity = new { type = "string" },
+                                    concept = new { type = "string" },
+                                    explanation = new { type = "string" },
+                                    scenario = new { type = "string" },
+
+                                    recommendations = new
+                                    {
+                                        type = "array",
+                                        items = new
+                                        {
+                                            type = "string"
+                                        }
+                                    }
+                                },
+
+                                required = new[]
+                    {
+                        "title",
+                        "severity",
+                        "concept",
+                        "explanation",
+                        "scenario",
+                        "recommendations"
+                    }
+                            }
+                        }
+                    },
+
+                    required = new[]
+        {
+            "riskLevel",
+            "summary",
+            "missingInformation",
+            "findings"
+        }
+                }
+            }
+        };
+
+        var responseBody = await SendRequestAsync(body);
+        var text = ExtractText(responseBody);
+
+        Console.WriteLine("Gemini raw response text:");
+        Console.WriteLine(text);
+
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            throw new InvalidOperationException(
+                "Gemini returned an empty structured response.");
+        }
+
+        var analysis = JsonSerializer.Deserialize<SecurityAnalysis>(
+            text,
+            new JsonSerializerOptions
+            {
+                PropertyNameCaseInsensitive = true
+            });
+
+        if (analysis is null)
+        {
+            throw new InvalidOperationException(
+                "Gemini response could not be converted to SecurityAnalysis.");
+        }
+
+        return analysis;
+    }
+
 }

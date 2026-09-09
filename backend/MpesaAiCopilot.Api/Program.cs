@@ -2,7 +2,8 @@ using MpesaAiCopilot.Api.Features.Ai;
 using MpesaAiCopilot.Api.Features.Ai.Contracts;
 using MpesaAiCopilot.Api.Features.Ai.Providers;
 using MpesaAiCopilot.Api.Features.Ai.Validation;
-
+using System.Text.Json;
+using System.Text.Json.Serialization;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -14,6 +15,14 @@ builder.Services.AddHttpClient<AnthropicClient>();
 builder.Services.AddHttpClient<GeminiClient>();
 
 builder.Services.AddScoped<AiClientFactory>();
+
+
+
+
+builder.Services.ConfigureHttpJsonOptions(options =>
+{
+    options.SerializerOptions.Converters.Add(new JsonStringEnumConverter());
+});
 
 builder.Services.AddOpenApi();
 
@@ -69,6 +78,89 @@ app.MapPost("/api/ai/chat", async (
 
     return Results.Ok(response);
 });
+
+//app.MapPost("/api/ai/analyze", async (
+//    ChatRequest request,
+//    AiClientFactory aiClientFactory) =>
+//{
+//    try
+//    {
+//        AiInputValidator.Validate(request.Message);
+//    }
+//    catch (ArgumentException ex)
+//    {
+//        return Results.BadRequest(new { error = ex.Message });
+//    }
+
+//    var aiClient = aiClientFactory.Create();
+
+//    var analysis = await aiClient.AnalyzeAsync(request.Message);
+
+//    return Results.Ok(analysis);
+//});
+
+
+
+app.MapPost("/api/ai/analyze", async (
+    ChatRequest request,
+    AiClientFactory aiClientFactory) =>
+{
+    try
+    {
+        AiInputValidator.Validate(request.Message);
+    }
+    catch (ArgumentException ex)
+    {
+        return Results.BadRequest(new { error = ex.Message });
+    }
+
+    var aiClient = aiClientFactory.Create();
+
+    SecurityAnalysis analysis;
+
+    try
+    {
+        analysis = await aiClient.AnalyzeAsync(request.Message);
+    }
+    catch (HttpRequestException ex)
+    {
+        app.Logger.LogError(ex, "AI provider request failed during security analysis.");
+
+        return Results.Problem(
+            title: "AI provider unavailable",
+            detail: "The AI provider could not process this request. Please try again shortly.",
+            statusCode: StatusCodes.Status502BadGateway);
+    }
+    catch (JsonException ex)
+    {
+        app.Logger.LogError(ex, "AI provider returned malformed structured output.");
+
+        return Results.Problem(
+            title: "AI provider returned an unreadable response",
+            detail: "The AI provider's response could not be parsed. Please try again.",
+            statusCode: StatusCodes.Status502BadGateway);
+    }
+    catch (InvalidOperationException ex)
+    {
+        app.Logger.LogError(ex, "AI provider response was missing expected data.");
+
+        return Results.Problem(
+            title: "AI provider returned an incomplete response",
+            detail: "The AI provider's response did not contain the expected data. Please try again.",
+            statusCode: StatusCodes.Status502BadGateway);
+    }
+
+    var validated = SecurityAnalysisValidator.Validate(analysis);
+    foreach (var warning in validated.ValidationWarnings)
+    {
+        app.Logger.LogWarning(
+            "Security analysis validation warning: {Warning}",
+            warning);
+    }
+
+    return Results.Ok(validated);
+});
+
 
 
 app.Run();

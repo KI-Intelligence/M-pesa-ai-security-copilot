@@ -85,4 +85,11 @@ public class OpenAiClient: IAiClient
         return new AiResponse(text ?? string.Empty);
     }
 
+
+    public Task<SecurityAnalysis> AnalyzeAsync(string message)
+    {
+        throw new NotImplementedException(
+            "Structured security analysis is not implemented for OpenAI yet.");
+    }
+
 }

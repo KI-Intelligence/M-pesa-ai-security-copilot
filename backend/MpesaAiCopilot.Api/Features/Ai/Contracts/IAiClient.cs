@@ -3,4 +3,6 @@
 public interface IAiClient
 {
     Task<AiResponse> ChatAsync(string message);
+
+    Task<SecurityAnalysis> AnalyzeAsync(string message);
 }
