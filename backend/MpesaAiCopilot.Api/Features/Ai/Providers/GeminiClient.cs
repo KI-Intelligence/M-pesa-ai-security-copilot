@@ -2,7 +2,7 @@
 using System.Text.Json;
 using MpesaAiCopilot.Api.Features.Ai.Contracts;
 using MpesaAiCopilot.Api.Features.Ai.Prompts;
-
+using Microsoft.Extensions.Logging;
 
 
 namespace MpesaAiCopilot.Api.Features.Ai.Providers;
@@ -14,13 +14,16 @@ public class GeminiClient : IAiClient
 
     private readonly HttpClient _httpClient;
     private readonly IConfiguration _configuration;
+    private readonly ILogger<GeminiClient> _logger;
 
     public GeminiClient(
         HttpClient httpClient,
-        IConfiguration configuration)
+        IConfiguration configuration,
+        ILogger<GeminiClient> logger)
     {
         _httpClient = httpClient;
         _configuration = configuration;
+        _logger = logger;
     }
 
     private string GetApiKey()
@@ -73,6 +76,8 @@ public class GeminiClient : IAiClient
     }
 
 
+    private const int MaxRetries = 3;
+
     private async Task<string> SendRequestAsync(object body)
     {
         var apiKey = GetApiKey();
@@ -81,29 +86,52 @@ public class GeminiClient : IAiClient
 
         var json = JsonSerializer.Serialize(body);
 
-        using var request = new HttpRequestMessage(
-            HttpMethod.Post,
-            url);
-
-        request.Content = new StringContent(
-            json,
-            Encoding.UTF8,
-            "application/json");
-
-        using var response =
-            await _httpClient.SendAsync(request);
-
-        var responseBody =
-            await response.Content.ReadAsStringAsync();
-
-        if (!response.IsSuccessStatusCode)
+        for (var attempt = 0; attempt <= MaxRetries; attempt++)
         {
-            throw new HttpRequestException(
-                $"Gemini returned {(int)response.StatusCode} " +
-                $"({response.StatusCode}): {responseBody}");
+            using var request = new HttpRequestMessage(
+                HttpMethod.Post,
+                url);
+
+            request.Content = new StringContent(
+                json,
+                Encoding.UTF8,
+                "application/json");
+
+            using var response =
+                await _httpClient.SendAsync(request);
+
+            var responseBody =
+                await response.Content.ReadAsStringAsync();
+
+            if (response.IsSuccessStatusCode)
+            {
+                return responseBody;
+            }
+
+            var isRetryable =
+                response.StatusCode == System.Net.HttpStatusCode.ServiceUnavailable ||
+                response.StatusCode == System.Net.HttpStatusCode.TooManyRequests;
+
+            if (!isRetryable || attempt == MaxRetries)
+            {
+                throw new HttpRequestException(
+                    $"Gemini returned {(int)response.StatusCode} " +
+                    $"({response.StatusCode}): {responseBody}");
+            }
+
+            var delaySeconds = Math.Pow(2, attempt);
+
+            _logger.LogWarning(
+        "Gemini returned {StatusCode}, retrying in {DelaySeconds}s (attempt {Attempt} of {MaxRetries}).",
+        (int)response.StatusCode,
+        delaySeconds,
+        attempt + 1,
+        MaxRetries);
+
+            await Task.Delay(TimeSpan.FromSeconds(delaySeconds));
         }
 
-        return responseBody;
+        throw new InvalidOperationException("Retry loop exited unexpectedly.");
     }
 
     private static string ExtractText(string responseBody)
