@@ -234,7 +234,11 @@ static string BuildAugmentedMessage(string question, List<KnowledgeDocument> doc
 {
     if (documents.Count == 0)
     {
-        return question;
+        return $"""
+            <user_question>
+            {question}
+            </user_question>
+            """;
     }
 
     var knowledgeSection = string.Join(
@@ -242,14 +246,19 @@ static string BuildAugmentedMessage(string question, List<KnowledgeDocument> doc
         documents.Select(d => $"### {d.Title}\n{d.Content}"));
 
     return $"""
-        Relevant security knowledge:
-
+        <retrieved_context>
         {knowledgeSection}
+        </retrieved_context>
 
-        Question:
+        <user_question>
         {question}
+        </user_question>
         """;
 }
+
+
+
+
 app.MapGet("/api/rag/debug-scores", async (
     string query,
     SemanticKnowledgeRetriever retriever) =>
@@ -263,7 +272,19 @@ app.MapGet("/api/rag/debug-scores", async (
     }));
 });
 
+app.MapGet("/api/rag/search-with-scores", async (
+    string query,
+    SemanticKnowledgeRetriever retriever) =>
+{
+    var results = await retriever.RetrieveWithScoresAsync(query);
 
+    return Results.Ok(results.Select(x => new
+    {
+        x.Document.Id,
+        x.Document.Title,
+        x.Score
+    }));
+});
 
 
 app.Run();
